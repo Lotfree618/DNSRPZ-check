@@ -43,9 +43,11 @@ const handleSearch = async (domain) => {
   currentResult.value = null
   
   try {
-    // Determine API URL (from env var in production, or relative path triggering proxy in dev)
-    const apiBase = import.meta.env.VITE_API_BASE_URL || ''
-    const response = await axios.get(`${apiBase}/api/resolve?domain=${encodeURIComponent(domain)}`)
+    // Determine API URL (assuming relative path proxy, or direct localhost for dev)
+    // For dev, we might need full URL if not proxied yet. 
+    // Assuming backend is at http://localhost:8000 for now or user configures proxy.
+    // Let's use relative '/api/resolve' and assume we set up proxy in vite.config.js
+    const response = await axios.get(`/api/resolve?domain=${encodeURIComponent(domain)}`)
     
     currentResult.value = response.data
     
@@ -103,7 +105,6 @@ header {
 h1 {
   background: linear-gradient(135deg, var(--primary-color), var(--success-color));
   -webkit-background-clip: text;
-  background-clip: text;
   -webkit-text-fill-color: transparent;
   font-size: 2.5rem;
   margin-bottom: 0.5rem;

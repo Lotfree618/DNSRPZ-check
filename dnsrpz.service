@@ -1,0 +1,12 @@
+[Unit]
+Description=DNSRPZ Check Backend
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/var/www/dnsrpz-check/backend
+ExecStart=/var/www/dnsrpz-check/backend/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
