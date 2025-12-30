@@ -108,8 +108,14 @@ def analyze_results(results: Dict[str, ResolverResult]) -> (BaselineInfo, Compar
         res_a_set = set(res_result.A.answers)
         if final_baseline_a and res_a_set:
             if not (final_baseline_a & res_a_set):
-                 # No intersection with EITHER Google OR Cloudflare
-                 mismatches.append(MismatchDetail(resolver=res_name, type="A", reason="结果与所有基准 (Google/CF) 均不一致"))
+                 # No intersection
+                 # Mark mismatch, but verdict depends on baseline consistency
+                 if baseline_agreed:
+                      # 如果 8.8.8.8 == 1.1.1.1，但本地不同 -> 值得注意
+                      mismatches.append(MismatchDetail(resolver=res_name, type="A", reason="结果与基准不一致"))
+                 else:
+                      # 基准自己都不同 (CDN)，本地不同也正常，忽略
+                      pass
 
     # --- 3. Verdict ---
     status = "OK"
