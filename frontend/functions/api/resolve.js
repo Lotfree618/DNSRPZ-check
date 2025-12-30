@@ -10,8 +10,9 @@ export async function onRequest(context) {
             method: context.request.method,
             headers: {
                 'Content-Type': context.request.headers.get('Content-Type') || 'application/json',
-                // 伪装成普通浏览器，防止部分防火墙/后端拦截空 UA
-                'User-Agent': "Mozilla/5.0 (Cloudflare Pages Proxy)",
+                // 使用真实的 Chrome User-Agent，防止被防火墙识别为 Bot
+                'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                'Accept': 'application/json, text/plain, */*',
             }
         });
 
