@@ -9,8 +9,6 @@ RESOLVERS: Dict[str, str] = {
     "google": "8.8.8.8",
     "cloudflare": "1.1.1.1",
     "hinet": "168.95.1.1",     # 中华电信
-    "twm": "211.78.130.2",     # 台湾大哥大
-    "fet": "139.175.55.244",   # 远传电信
     "so-net": "61.64.127.1",   # So-net (Added from test.py)
     "quad101": "101.101.101.101" # TWNIC
 }

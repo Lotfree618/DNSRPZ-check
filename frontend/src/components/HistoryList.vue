@@ -14,9 +14,10 @@ const formatDate = (iso) => {
 const getStatusInfo = (status) => {
   const map = {
     'OK': { text: '正常', class: 'status-success' },
-    'SUSPECTED_RPZ': { text: '疑似污染', class: 'status-danger' },
+    'SUSPECTED_RPZ': { text: '被污染/RPZ', class: 'status-danger' },
     'DOMAIN_NOT_FOUND': { text: '不存在', class: 'status-danger' },
     'POSSIBLE_INTERFERENCE': { text: '可能干扰', class: 'status-warning' },
+    'TIMEOUT': { text: '超时', class: 'status-danger' },
     'UNCERTAIN': { text: '不确定', class: 'status-muted' }
   }
   return map[status] || { text: status, class: 'status-muted' }

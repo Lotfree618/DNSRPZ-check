@@ -18,7 +18,7 @@ const conclusionClass = computed(() => {
 const conclusionText = computed(() => {
   const map = {
     'OK': '正常 (OK)',
-    'SUSPECTED_RPZ': '疑似污染/RPZ',
+    'SUSPECTED_RPZ': '被污染/RPZ',
     'DOMAIN_NOT_FOUND': '域名不存在',
     'POSSIBLE_INTERFERENCE': '可能干扰',
     'UNCERTAIN': '不确定 (Uncertain)'
@@ -31,8 +31,7 @@ const resolversList = computed(() => {
     { key: 'google', name: 'Google (8.8.8.8)' },
     { key: 'cloudflare', name: 'Cloudflare (1.1.1.1)' },
     { key: 'hinet', name: '中华电信' },
-    { key: 'twm', name: '台湾大哥大' },
-    { key: 'fet', name: '远传电信' },
+    { key: 'so-net', name: 'So-net' },
     { key: 'quad101', name: 'TWNIC (101)' },
   ]
 })
@@ -49,7 +48,7 @@ const getStatusDisplay = (resolverResult) => {
   const map = {
     'NOERROR': { text: '正常', class: 'text-success' },
     'NXDOMAIN': { text: '不存在 (NX)', class: 'text-danger' },
-    'TIMEOUT': { text: '超时', class: 'text-warning' },
+    'TIMEOUT': { text: '超时', class: 'text-danger' },
     'SERVFAIL': { text: '失败 (ServFail)', class: 'text-danger' },
     'REFUSED': { text: '拒绝 (Refused)', class: 'text-danger' }
   }
