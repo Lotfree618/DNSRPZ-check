@@ -1,6 +1,6 @@
 export async function onRequest(context) {
     // 修改为你的后端 VPS IP 地址 (必须是 HTTP)
-    const BACKEND_URL = "http://1.2.3.4:8000";
+    const BACKEND_URL = "http://35.206.230.61:8000";
 
     const url = new URL(context.request.url);
     const targetUrl = `${BACKEND_URL}/api/resolve${url.search}`;
