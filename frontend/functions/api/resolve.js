@@ -9,16 +9,21 @@ export async function onRequest(context) {
         const response = await fetch(targetUrl, {
             method: context.request.method,
             headers: {
-                // 传递必要的 headers，或者根据需要过滤
                 'Content-Type': context.request.headers.get('Content-Type') || 'application/json',
+                // 伪装成普通浏览器，防止部分防火墙/后端拦截空 UA
+                'User-Agent': "Mozilla/5.0 (Cloudflare Pages Proxy)",
             }
         });
 
-        // 重新构建响应以解决 CORS 或其他问题（虽然同源代理通常不需要 CORS）
+        // 重新构建响应
+        const newHeaders = new Headers(response.headers);
+        newHeaders.set("X-Debug-Proxy", "True"); // 标记这是经过 Proxy 的
+        newHeaders.set("X-Upstream-Status", response.status); // 记录上游返回的状态码
+
         return new Response(response.body, {
             status: response.status,
             statusText: response.statusText,
-            headers: response.headers
+            headers: newHeaders
         });
     } catch (err) {
         return new Response(JSON.stringify({ error: "Backend Proxy Failed", details: err.message }), {
