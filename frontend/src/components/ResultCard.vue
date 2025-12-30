@@ -31,7 +31,6 @@ const resolversList = computed(() => {
     { key: 'google', name: 'Google (8.8.8.8)' },
     { key: 'cloudflare', name: 'Cloudflare (1.1.1.1)' },
     { key: 'hinet', name: '中华电信' },
-    { key: 'so-net', name: 'So-net' },
     { key: 'quad101', name: 'TWNIC (101)' },
   ]
 })
@@ -44,11 +43,17 @@ const getStatusDisplay = (resolverResult) => {
   if (status === 'NOERROR' && (!answers || answers.length === 0)) {
     return { text: '未知 (无结果)', class: 'text-warning' }
   }
+
+  // Logic: Detect Specific Polluted IP (182.173.0.181 which is 165 Anti-Fraud)
+  // Ideally this list should come from backend, but hardcoding for immediate UI fix as requested
+  if (answers && answers.includes('182.173.0.181')) {
+     return { text: '被RPZ污染', class: 'text-danger' }
+  }
   
   const map = {
     'NOERROR': { text: '正常', class: 'text-success' },
     'NXDOMAIN': { text: '不存在 (NX)', class: 'text-danger' },
-    'TIMEOUT': { text: '超时', class: 'text-danger' },
+    'TIMEOUT': { text: '超时', class: 'text-warning' },
     'SERVFAIL': { text: '失败 (ServFail)', class: 'text-danger' },
     'REFUSED': { text: '拒绝 (Refused)', class: 'text-danger' }
   }
