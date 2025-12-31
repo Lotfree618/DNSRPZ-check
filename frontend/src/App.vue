@@ -6,10 +6,10 @@ const loading = ref(false)
 const error = ref('')
 const result = ref(null)
 const history = ref([])
+const expandedIps = ref({}) // 用于跟踪展开的IP列表
 
 const HISTORY_KEY = 'dnsrpz_history_v1'
 const MAX_HISTORY = 10
-
 const API_BASE = '/api'
 
 function extractDomain(input) {
@@ -17,14 +17,9 @@ function extractDomain(input) {
   if (!input) return ''
   if (input.includes('://') || input.includes('/') || input.includes('?') || input.includes('#')) {
     try {
-      if (!input.startsWith('http://') && !input.startsWith('https://')) {
-        input = 'http://' + input
-      }
-      const url = new URL(input)
-      return url.hostname.toLowerCase()
-    } catch {
-      return input.toLowerCase()
-    }
+      if (!input.startsWith('http://') && !input.startsWith('https://')) input = 'http://' + input
+      return new URL(input).hostname.toLowerCase()
+    } catch { return input.toLowerCase() }
   }
   return input.toLowerCase().replace(/\.$/, '')
 }
@@ -64,6 +59,7 @@ async function doQuery() {
   loading.value = true
   error.value = ''
   result.value = null
+  expandedIps.value = {}
   try {
     const res = await fetch(`${API_BASE}/resolve?target=${encodeURIComponent(domain)}`)
     const data = await res.json()
@@ -78,6 +74,25 @@ async function doQuery() {
 function queryFromHistory(domain) {
   query.value = domain
   doQuery()
+}
+
+// 格式化IP显示，超过2个时显示省略
+function formatIps(ips, key) {
+  if (!ips || ips.length === 0) return '—'
+  if (ips.length <= 2 || expandedIps.value[key]) {
+    return ips.join(', ')
+  }
+  return ips.slice(0, 2).join(', ')
+}
+
+// 判断是否需要显示展开按钮
+function hasMoreIps(ips) {
+  return ips && ips.length > 2
+}
+
+// 切换IP展开状态
+function toggleIps(key) {
+  expandedIps.value[key] = !expandedIps.value[key]
 }
 
 const conclusionClass = computed(() => {
@@ -113,32 +128,58 @@ onMounted(() => { loadHistory() })
     </div>
 
     <div v-if="result && !loading" class="results">
-      <!-- 结论 -->
+      <!-- 结论卡片 -->
       <div class="conclusion-card" :class="conclusionClass">
-        <span class="conclusion-icon">{{ conclusionClass === 'ok' ? '✅' : conclusionClass === 'abnormal' ? '🚫' : '⚠️' }}</span>
-        <span class="conclusion-text">{{ result.conclusion.status }}</span>
-        <span class="conclusion-domain">{{ result.domain }}</span>
+        <div class="conclusion-main">
+          <span class="conclusion-icon">{{ conclusionClass === 'ok' ? '✅' : conclusionClass === 'abnormal' ? '🚫' : '⚠️' }}</span>
+          <span class="conclusion-text">{{ result.conclusion.status }}</span>
+          <span class="conclusion-domain">{{ result.domain }}</span>
+        </div>
+        <div class="conclusion-reason">
+          {{ result.conclusion.reason[0] }}
+        </div>
       </div>
 
-      <!-- DNS结果表格 -->
+      <!-- DNS结果 - PC横向 / 移动端纵向 -->
       <div class="dns-grid">
         <div class="dns-section">
           <div class="section-title">📡 基准DNS</div>
           <div class="dns-items">
             <div v-for="r in result.baseline.detail" :key="r.ip" class="dns-item">
-              <div class="dns-name">{{ r.name.replace(' DNS', '') }}</div>
-              <div class="dns-ips">{{ r.ips.slice(0, 2).join(', ') || '—' }}</div>
-              <span class="status-dot ok"></span>
+              <div class="dns-info">
+                <span class="dns-name">{{ r.name.replace(' DNS', '') }}</span>
+                <span class="dns-server-ip">({{ r.ip }})</span>
+              </div>
+              <div class="dns-result">
+                <span class="dns-ips" @click="hasMoreIps(r.ips) && toggleIps('baseline-' + r.ip)">
+                  {{ formatIps(r.ips, 'baseline-' + r.ip) }}
+                  <span v-if="hasMoreIps(r.ips)" class="expand-btn">
+                    {{ expandedIps['baseline-' + r.ip] ? '收起' : `+${r.ips.length - 2}` }}
+                  </span>
+                </span>
+                <span class="status-dot ok"></span>
+              </div>
             </div>
           </div>
         </div>
+
         <div class="dns-section">
           <div class="section-title">📡 台湾DNS</div>
           <div class="dns-items">
             <div v-for="r in result.tw_resolvers" :key="r.ip" class="dns-item">
-              <div class="dns-name">{{ r.name.replace('（中华电信）', '') }}</div>
-              <div class="dns-ips">{{ r.ips.slice(0, 2).join(', ') || '—' }}</div>
-              <span class="status-dot" :class="{ ok: r.classification === '正常', error: r.classification === '已封锁' || r.classification === '被阻断', warn: r.classification === '超时' || r.classification === '差异（可能CDN）' }"></span>
+              <div class="dns-info">
+                <span class="dns-name">{{ r.name.replace('（中华电信）', '') }}</span>
+                <span class="dns-server-ip">({{ r.ip }})</span>
+              </div>
+              <div class="dns-result">
+                <span class="dns-ips" @click="hasMoreIps(r.ips) && toggleIps('tw-' + r.ip)">
+                  {{ formatIps(r.ips, 'tw-' + r.ip) }}
+                  <span v-if="hasMoreIps(r.ips)" class="expand-btn">
+                    {{ expandedIps['tw-' + r.ip] ? '收起' : `+${r.ips.length - 2}` }}
+                  </span>
+                </span>
+                <span class="status-dot" :class="{ ok: r.classification === '正常', error: r.classification === '已封锁' || r.classification === '被阻断', warn: r.classification === '超时' || r.classification.includes('CDN') }"></span>
+              </div>
             </div>
           </div>
         </div>
