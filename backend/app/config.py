@@ -1,31 +1,22 @@
-from typing import List, Dict
-
-# 超时设置
-DNS_TIMEOUT = 2.0  # 秒 (增加一点超时时间)
-DNS_LIFETIME = 4.0  # 秒
-
-# Resolver 定义
-RESOLVERS: Dict[str, str] = {
-    "google": "8.8.8.8",
-    "cloudflare": "1.1.1.1",
-    "hinet": "168.95.1.1",     # 中华电信
-    "quad101": "101.101.101.101" # TWNIC
-}
-
-# 疑似拦截/污染的 CIDR (宽范围)
-SUSPICIOUS_NETWORKS = [
-    "0.0.0.0/8",
-    "127.0.0.0/8",
-    "10.0.0.0/8",
-    "172.16.0.0/12",
-    "192.168.0.0/16",
+# DNS配置
+BASELINE_RESOLVERS = [
+    {"name": "Google DNS", "ip": "8.8.8.8"},
+    {"name": "Cloudflare DNS", "ip": "1.1.1.1"},
 ]
 
-# 明确的拦截页/保留 IP (精确匹配)
-# 参考 test.py
-KNOWN_BLOCK_IPS = {
-    "182.173.0.181", # 台湾 165 反诈骗警示页面
-    "104.18.0.0",    # 某些配置错误/阻断 (Cloudflare 网段但被用作阻断?) - 保留自 test.py
+TW_RESOLVERS = [
+    {"name": "HiNet（中华电信）", "ip": "168.95.1.1"},
+    {"name": "TWNIC Quad101", "ip": "101.101.101.101"},
+]
+
+# 黑名单IP（台湾RPZ常见封锁页）
+BLOCK_PAGE_IPS = frozenset([
+    "182.173.0.181",
+    "104.18.0.0",
+    "127.0.0.1",
     "0.0.0.0",
-    "127.0.0.1"
-}
+])
+
+# 超时设置（秒）
+BASELINE_TIMEOUT = 3.0
+TW_TIMEOUT = 4.0

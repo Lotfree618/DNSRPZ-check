@@ -1,88 +1,116 @@
 import asyncio
-import time
+import re
+from urllib.parse import urlparse
+from typing import Optional
+import dns.resolver
 import dns.asyncresolver
-import dns.message
 import dns.rdatatype
-import dns.flags
-from typing import Dict, List, Optional
-from app.config import RESOLVERS, DNS_TIMEOUT, DNS_LIFETIME
-from app.schemas import ResolverResult, DnsAnswer
+import dns.exception
 
-async def query_once(resolver_ip: str, domain: str, rdtype: str) -> DnsAnswer:
-    # 构造查询
+
+def normalize_domain(target: str) -> Optional[str]:
+    """
+    将用户输入（域名或URL）归一化为hostname
+    返回None表示无效输入
+    """
+    target = target.strip()
+    if not target:
+        return None
+
+    # URL特征检测
+    if "://" in target or "/" in target or "?" in target or "#" in target:
+        if not target.startswith(("http://", "https://")):
+            target = "http://" + target
+        try:
+            parsed = urlparse(target)
+            hostname = parsed.hostname
+            if not hostname:
+                return None
+            target = hostname
+        except Exception:
+            return None
+
+    # 转小写、去尾点
+    target = target.lower().rstrip(".")
+
+    # 验证域名格式
+    if not target or " " in target or len(target) > 253:
+        return None
+
+    # IDN转punycode
     try:
-        # Create a UDP query
-        qname = dns.name.from_text(domain)
-        request = dns.message.make_query(qname, getattr(dns.rdatatype, rdtype))
-        
-        # Send query
-        response = await dns.asyncquery.udp(
-            request, 
-            resolver_ip, 
-            timeout=DNS_TIMEOUT
-        )
-        
-        # Parse result
-        answers = []
-        min_ttl = None
-        
-        if response.rcode() == dns.rcode.NOERROR:
-            status = "NOERROR"
-            for rrset in response.answer:
-                if rrset.rdtype == getattr(dns.rdatatype, rdtype):
-                    if min_ttl is None:
-                        min_ttl = rrset.ttl
-                    else:
-                        min_ttl = min(min_ttl, rrset.ttl)
-                    
-                    for rr in rrset:
-                        answers.append(rr.to_text())
-        elif response.rcode() == dns.rcode.NXDOMAIN:
-            status = "NXDOMAIN"
-        elif response.rcode() == dns.rcode.SERVFAIL:
-            status = "SERVFAIL"
-        elif response.rcode() == dns.rcode.REFUSED:
-            status = "REFUSED"
-        else:
-            status = f"RCODE_{response.rcode()}"
-            
-        return DnsAnswer(status=status, answers=answers, ttl=min_ttl)
+        target = target.encode("idna").decode("ascii")
+    except Exception:
+        pass
 
-    except dns.exception.Timeout:
-        return DnsAnswer(status="TIMEOUT", answers=[], ttl=None)
-    except Exception as e:
-        return DnsAnswer(status=f"ERROR_{type(e).__name__}", answers=[], ttl=None)
+    return target
 
-async def probe_resolver(name: str, ip: str, domain: str) -> ResolverResult:
-    start_time = time.time()
-    
-    # Concurrent A and AAAA
-    task_a = query_once(ip, domain, "A")
-    task_aaaa = query_once(ip, domain, "AAAA")
-    
-    res_a, res_aaaa = await asyncio.gather(task_a, task_aaaa)
-    
-    elapsed = int((time.time() - start_time) * 1000)
-    
-    return ResolverResult(
-        ip=ip,
-        A=res_a,
-        AAAA=res_aaaa,
-        elapsed_ms=elapsed
-    )
 
-async def probe_domain(domain: str) -> Dict[str, ResolverResult]:
+async def query_dns(domain: str, resolver_ip: str, timeout: float) -> dict:
+    """
+    查询单个DNS服务器的A/AAAA记录
+    返回: {"status": "ok"|"nxdomain"|"timeout"|"error", "ips": [...], "msg": "..."}
+    """
+    resolver = dns.asyncresolver.Resolver()
+    resolver.nameservers = [resolver_ip]
+    resolver.lifetime = timeout
+
+    ips = []
+    # 查询A记录
+    for rdtype in [dns.rdatatype.A, dns.rdatatype.AAAA]:
+        try:
+            answer = await resolver.resolve(domain, rdtype)
+            for rdata in answer:
+                ips.append(rdata.to_text())
+        except dns.resolver.NXDOMAIN:
+            return {"status": "nxdomain", "ips": [], "msg": None}
+        except dns.resolver.NoAnswer:
+            pass  # 该类型无记录，继续
+        except dns.exception.Timeout:
+            return {"status": "timeout", "ips": [], "msg": "查询超时"}
+        except Exception as e:
+            return {"status": "error", "ips": [], "msg": str(e)}
+
+    return {"status": "ok", "ips": ips, "msg": None}
+
+
+async def probe_all(domain: str, baseline_resolvers: list, tw_resolvers: list, 
+                    baseline_timeout: float, tw_timeout: float) -> dict:
+    """
+    并发查询所有DNS服务器
+    """
     tasks = []
-    names = []
     
-    for name, ip in RESOLVERS.items():
-        names.append(name)
-        tasks.append(probe_resolver(name, ip, domain))
+    # 基准DNS
+    for r in baseline_resolvers:
+        tasks.append(query_dns(domain, r["ip"], baseline_timeout))
     
-    results_list = await asyncio.gather(*tasks)
+    # 台湾DNS
+    for r in tw_resolvers:
+        tasks.append(query_dns(domain, r["ip"], tw_timeout))
     
-    results = {}
-    for name, res in zip(names, results_list):
-        results[name] = res
-        
-    return results
+    results = await asyncio.gather(*tasks)
+    
+    baseline_results = []
+    for i, r in enumerate(baseline_resolvers):
+        res = results[i]
+        baseline_results.append({
+            "name": r["name"],
+            "ip": r["ip"],
+            **res
+        })
+    
+    tw_results = []
+    offset = len(baseline_resolvers)
+    for i, r in enumerate(tw_resolvers):
+        res = results[offset + i]
+        tw_results.append({
+            "name": r["name"],
+            "ip": r["ip"],
+            **res
+        })
+    
+    return {
+        "baseline": baseline_results,
+        "tw": tw_results
+    }
