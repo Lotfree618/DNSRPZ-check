@@ -1,0 +1,9 @@
+# 域名列表（每行一个域名）
+# 支持 URL 格式，会自动提取域名
+# 空行和以 # 开头的行会被忽略
+
+google.com
+youtube.com
+github.com
+example.com
+cloudflare.com

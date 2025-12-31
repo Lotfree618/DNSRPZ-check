@@ -1,84 +1,88 @@
-from .config import BLOCK_PAGE_IPS
-from .schemas import TwClassification, ConclusionStatus
+"""结果判定与聚合"""
+from typing import Dict, List, Set
+from . import config
 
 
-def classify_tw_result(tw_result: dict, baseline_ips: set) -> TwClassification:
-    """
-    对单个台湾DNS结果进行分类
-    """
-    status = tw_result["status"]
-    ips = set(tw_result.get("ips", []))
-
+def classify_tw_result(
+    result: Dict,
+    baseline_ips: Set[str]
+) -> str:
+    """对台湾解析器结果进行分类"""
+    status = result.get("status")
+    ips = set(result.get("ips", []))
+    
     if status == "timeout":
-        return TwClassification.TIMEOUT
-    
-    if status == "nxdomain":
-        return TwClassification.NXDOMAIN
-    
+        return "超时"
     if status == "error":
-        return TwClassification.ERROR
+        return "错误"
+    if status == "nxdomain":
+        return "被阻断"
     
     # status == "ok"
-    # 检查黑名单
-    if ips & BLOCK_PAGE_IPS:
-        return TwClassification.BLOCKED
+    # 检查是否命中黑名单
+    if ips & config.BLOCK_PAGE_IPS:
+        return "已封锁"
     
-    # 检查是否为baseline子集
-    if ips and ips.issubset(baseline_ips):
-        return TwClassification.NORMAL
+    # 检查是否为基准子集
+    if not baseline_ips:
+        return "错误"  # 基准无结果时标记为错误
     
-    # 有差异（可能CDN）
-    return TwClassification.DIFF
+    if ips.issubset(baseline_ips):
+        return "正常"
+    
+    return "解析差异"
 
 
-def aggregate_conclusion(tw_classifications: list[TwClassification]) -> tuple[ConclusionStatus, list[str]]:
-    """
-    聚合最终结论
-    返回: (status, reasons)
-    """
+def aggregate_verdict(probe_result: Dict) -> Dict:
+    """聚合域名级判定结果"""
+    domain = probe_result["domain"]
+    baseline_results = probe_result["baseline"]
+    tw_results = probe_result["tw"]
+    
+    # 构建基准 IP 集合
+    baseline_ips = set()
+    for r in baseline_results:
+        if r.get("status") == "ok":
+            baseline_ips.update(r.get("ips", []))
+    
+    # 分类台湾解析器结果
+    tw_classified = []
     reasons = []
     
-    has_blocked = False
-    has_nxdomain = False
-    has_timeout = False
-    has_error = False
-    has_diff = False
-    has_normal = False
-
-    for cls in tw_classifications:
-        if cls == TwClassification.BLOCKED:
-            has_blocked = True
-        elif cls == TwClassification.NXDOMAIN:
-            has_nxdomain = True
-        elif cls == TwClassification.TIMEOUT:
-            has_timeout = True
-        elif cls == TwClassification.ERROR:
-            has_error = True
-        elif cls == TwClassification.DIFF:
-            has_diff = True
-        elif cls == TwClassification.NORMAL:
-            has_normal = True
-
-    # 判定逻辑
-    if has_blocked or has_nxdomain:
-        status = ConclusionStatus.ABNORMAL
-        if has_blocked:
-            reasons.append("检测到台湾DNS返回黑名单IP，域名可能已被封锁")
-        if has_nxdomain:
-            reasons.append("检测到台湾DNS返回NXDOMAIN，域名可能被阻断")
-    elif has_timeout or has_error:
-        status = ConclusionStatus.UNCERTAIN
-        if has_timeout:
-            reasons.append("部分台湾DNS查询超时，无法确认状态")
-        if has_error:
-            reasons.append("部分台湾DNS查询出错，请稍后重试")
-    else:
-        status = ConclusionStatus.OK
-        if has_diff:
-            reasons.append("台湾DNS返回IP与基准有差异，可能为CDN/地域差异，属正常现象")
-        if has_normal:
-            reasons.append("台湾DNS解析正常，未检测到RPZ封锁")
-        if not reasons:
-            reasons.append("解析结果正常")
-
-    return status, reasons
+    for r in tw_results:
+        category = classify_tw_result(r, baseline_ips)
+        tw_classified.append({
+            **r,
+            "category": category
+        })
+        
+        # 收集异常原因
+        if category == "被阻断":
+            reasons.append("污染：被阻断")
+        elif category == "已封锁":
+            reasons.append("污染：已封锁")
+        elif category == "超时":
+            reasons.append("检测失败：超时")
+        elif category == "错误":
+            reasons.append("检测失败：错误")
+    
+    # 基准无结果
+    if not baseline_ips:
+        reasons.append("基准无结果")
+    
+    # 去重
+    reasons = list(dict.fromkeys(reasons))
+    
+    # 域名级状态
+    status = "正常" if not reasons else "异常"
+    
+    return {
+        "domain": domain,
+        "status": status,
+        "reasons": reasons,
+        "baseline": {
+            "ips": sorted(baseline_ips),
+            "detail": baseline_results
+        },
+        "tw": tw_classified
+    }

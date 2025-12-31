@@ -1,175 +1,286 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 
-const query = ref('')
-const loading = ref(false)
-const error = ref('')
-const result = ref(null)
-const history = ref([])
-const expandedIps = ref({}) // 记录哪些IP列表已展开
+// 状态
+const domains = ref([])
+const loading = ref(true)
+const error = ref(null)
+const selectedDomain = ref(null)
+const detailData = ref(null)
+const detailLoading = ref(false)
+const lastUpdate = ref(null)
 
-const HISTORY_KEY = 'dnsrpz_history_v1'
-const MAX_HISTORY = 10
-const API_BASE = '/api'
+// API 基础地址
+const API_BASE = import.meta.env.PROD ? '' : 'http://localhost:8000'
 
-function extractDomain(input) {
-  input = input.trim()
-  if (!input) return ''
-  if (input.includes('://') || input.includes('/') || input.includes('?') || input.includes('#')) {
-    try {
-      if (!input.startsWith('http://') && !input.startsWith('https://')) input = 'http://' + input
-      return new URL(input).hostname.toLowerCase()
-    } catch { return input.toLowerCase() }
-  }
-  return input.toLowerCase().replace(/\.$/, '')
-}
-
-function handleBlur() {
-  const domain = extractDomain(query.value)
-  if (domain) query.value = domain
-}
-
-function loadHistory() {
-  try {
-    const data = localStorage.getItem(HISTORY_KEY)
-    if (data) history.value = JSON.parse(data)
-  } catch { history.value = [] }
-}
-
-function saveHistory(domain, status) {
-  history.value = history.value.filter(item => item.domain !== domain)
-  history.value.unshift({ domain, status, ts: Date.now() })
-  if (history.value.length > MAX_HISTORY) history.value = history.value.slice(0, MAX_HISTORY)
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(history.value))
-}
-
-function clearHistory() {
-  history.value = []
-  localStorage.removeItem(HISTORY_KEY)
-}
-
-function formatTime(ts) {
-  return new Date(ts).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-}
-
-async function doQuery() {
-  const domain = extractDomain(query.value)
-  if (!domain) { error.value = '请输入有效的域名或URL'; return }
-  query.value = domain
-  loading.value = true
-  error.value = ''
-  result.value = null
-  expandedIps.value = {}
-  try {
-    const res = await fetch(`${API_BASE}/resolve?target=${encodeURIComponent(domain)}`)
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.detail || '请求失败')
-    result.value = data
-    saveHistory(data.domain, data.conclusion.status)
-  } catch (e) {
-    error.value = e.message || '网络错误，请稍后重试'
-  } finally { loading.value = false }
-}
-
-function queryFromHistory(domain) {
-  query.value = domain
-  doQuery()
-}
-
-function toggleIps(key) {
-  expandedIps.value[key] = !expandedIps.value[key]
-}
-
-function formatIps(ips, key) {
-  if (!ips || ips.length === 0) return '—'
-  if (ips.length <= 2 || expandedIps.value[key]) return ips.join(', ')
-  return ips.slice(0, 2).join(', ') + ` (+${ips.length - 2})`
-}
-
-const conclusionClass = computed(() => {
-  if (!result.value) return ''
-  const status = result.value.conclusion.status
-  if (status === 'OK') return 'ok'
-  if (status === '异常') return 'abnormal'
-  return 'uncertain'
+// 计算统计
+const stats = computed(() => {
+  const total = domains.value.length
+  const normal = domains.value.filter(d => d.status === '正常').length
+  const abnormal = total - normal
+  return { total, normal, abnormal }
 })
 
-onMounted(() => { loadHistory() })
+// 获取状态列表
+async function fetchStatus() {
+  try {
+    const res = await fetch(`${API_BASE}/api/status`)
+    if (!res.ok) throw new Error('API 请求失败')
+    const data = await res.json()
+    domains.value = data.domains
+    lastUpdate.value = new Date().toLocaleTimeString('zh-CN')
+    error.value = null
+  } catch (e) {
+    error.value = e.message
+  } finally {
+    loading.value = false
+  }
+}
+
+// 获取域名详情
+async function fetchDetail(domain) {
+  selectedDomain.value = domain
+  detailLoading.value = true
+  detailData.value = null
+  
+  try {
+    const res = await fetch(`${API_BASE}/api/detail?domain=${encodeURIComponent(domain)}`)
+    if (!res.ok) throw new Error('获取详情失败')
+    detailData.value = await res.json()
+  } catch (e) {
+    console.error(e)
+  } finally {
+    detailLoading.value = false
+  }
+}
+
+// 关闭弹窗
+function closeModal() {
+  selectedDomain.value = null
+  detailData.value = null
+}
+
+// 格式化时间
+function formatTime(isoStr) {
+  if (!isoStr) return '-'
+  const d = new Date(isoStr)
+  return d.toLocaleTimeString('zh-CN')
+}
+
+// 获取分类样式类
+function getCategoryClass(category) {
+  const map = {
+    '正常': 'normal',
+    '解析差异': 'diff',
+    '被阻断': 'blocked',
+    '已封锁': 'banned',
+    '超时': 'timeout',
+    '错误': 'error'
+  }
+  return map[category] || 'error'
+}
+
+// 判断 IP 是否匹配基准
+function isIpMatched(ip, baselineIps) {
+  return baselineIps && baselineIps.includes(ip)
+}
+
+// 获取 IP 标签样式
+function getIpClass(ip, baselineIps, category) {
+  if (category === '正常') return 'match'
+  if (category === '解析差异') {
+    return isIpMatched(ip, baselineIps) ? 'match' : 'diff'
+  }
+  if (['被阻断', '已封锁', '超时', '错误'].includes(category)) return 'error'
+  return ''
+}
+
+// 定时刷新
+let timer = null
+
+onMounted(() => {
+  fetchStatus()
+  timer = setInterval(fetchStatus, 10000)
+})
+
+onUnmounted(() => {
+  if (timer) clearInterval(timer)
+})
 </script>
 
 <template>
-  <div class="app-container">
+  <div class="app">
+    <!-- 头部 -->
     <header class="header">
-      <h1>🔍 台湾DNS RPZ检测</h1>
-      <p>检测域名是否被台湾ISP的DNS封锁</p>
+      <h1>🌐 域名台湾DNS RPZ检测</h1>
+      <p>实时检测域名在台湾DNS解析器（中华电信、Twnic）的可用性</p>
     </header>
 
-    <section class="search-section">
-      <form class="search-form" @submit.prevent="doQuery">
-        <input v-model="query" type="text" class="search-input" placeholder="输入域名或URL" @blur="handleBlur" :disabled="loading" />
-        <button type="submit" class="search-btn" :disabled="loading">{{ loading ? '检测中...' : '检测' }}</button>
-      </form>
-    </section>
-
-    <div v-if="error" class="error-msg">❌ {{ error }}</div>
-
-    <div v-if="loading" class="loading">
-      <div class="spinner"></div>
-      <span>正在查询...</span>
-    </div>
-
-    <div v-if="result && !loading" class="results">
-      <!-- 结论 -->
-      <div class="conclusion-card" :class="conclusionClass">
-        <div class="conclusion-main">
-          <span class="conclusion-icon">{{ conclusionClass === 'ok' ? '✅' : conclusionClass === 'abnormal' ? '🚫' : '⚠️' }}</span>
-          <span class="conclusion-text">{{ result.conclusion.status }}</span>
-          <span class="conclusion-domain">{{ result.domain }}</span>
-        </div>
-        <div class="conclusion-reason">{{ result.conclusion.reason[0] }}</div>
+    <main class="container">
+      <!-- 加载状态 -->
+      <div v-if="loading" class="loading">
+        <div class="spinner"></div>
+        <p>正在加载数据...</p>
       </div>
 
-      <!-- DNS结果表格 - 横向布局 -->
-      <div class="dns-grid">
-        <div class="dns-section">
-          <div class="section-title">📡 基准DNS</div>
-          <div class="dns-items">
-            <div v-for="r in result.baseline.detail" :key="r.ip" class="dns-item">
-              <div class="dns-name">{{ r.name.replace(' DNS', '') }}</div>
-              <div class="dns-ips" :class="{ clickable: r.ips.length > 2 }" @click="r.ips.length > 2 && toggleIps('b-' + r.ip)">
-                {{ formatIps(r.ips, 'b-' + r.ip) }}
-              </div>
-              <span class="status-dot ok"></span>
+      <!-- 主内容 -->
+      <template v-else>
+        <!-- 统计卡片 -->
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="label">监控域名</div>
+            <div class="value">{{ stats.total }}</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">正常</div>
+            <div class="value normal">● {{ stats.normal }}</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">异常</div>
+            <div class="value error">● {{ stats.abnormal }}</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">最后更新</div>
+            <div class="value" style="font-size: 1.1rem;">{{ lastUpdate || '-' }}</div>
+          </div>
+        </div>
+
+        <!-- 空状态 -->
+        <div v-if="domains.length === 0" class="empty-state">
+          <p>暂无监控域名</p>
+          <p style="font-size: 0.85rem; margin-top: 8px;">请在服务器 Domains.txt 中添加域名</p>
+        </div>
+
+        <!-- 域名列表 -->
+        <div v-else class="domain-list">
+          <div
+            v-for="item in domains"
+            :key="item.domain"
+            class="domain-card"
+            @click="fetchDetail(item.domain)"
+          >
+            <div
+              class="status-dot"
+              :class="item.status === '正常' ? 'normal' : 'error'"
+            ></div>
+            <div class="domain-info">
+              <div class="domain-name">{{ item.domain }}</div>
+              <div class="domain-time">{{ formatTime(item.last_probe_at) }}</div>
+            </div>
+            <div
+              class="status-badge"
+              :class="item.status === '正常' ? 'normal' : 'error'"
+            >
+              {{ item.status }}
             </div>
           </div>
         </div>
-        <div class="dns-section">
-          <div class="section-title">📡 台湾DNS</div>
-          <div class="dns-items">
-            <div v-for="r in result.tw_resolvers" :key="r.ip" class="dns-item">
-              <div class="dns-name">{{ r.name.replace('（中华电信）', '') }}</div>
-              <div class="dns-ips" :class="{ clickable: r.ips.length > 2 }" @click="r.ips.length > 2 && toggleIps('tw-' + r.ip)">
-                {{ formatIps(r.ips, 'tw-' + r.ip) }}
-              </div>
-              <span class="status-dot" :class="{ ok: r.classification === '正常', error: r.classification === '已封锁' || r.classification === '被阻断', warn: r.classification === '超时' || r.classification.includes('CDN') }"></span>
-            </div>
+      </template>
+    </main>
+
+    <!-- 详情弹窗 -->
+    <div v-if="selectedDomain" class="modal-overlay" @click.self="closeModal">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>{{ selectedDomain }}</h2>
+          <button class="modal-close" @click="closeModal">×</button>
+        </div>
+
+        <div class="modal-body">
+          <!-- 加载中 -->
+          <div v-if="detailLoading" class="loading">
+            <div class="spinner"></div>
           </div>
+
+          <!-- 详情内容 -->
+          <template v-else-if="detailData">
+            <!-- 状态 -->
+            <div class="detail-section">
+              <div class="section-title">检测结果</div>
+              <div
+                class="status-display"
+                :class="detailData.status === '正常' ? 'normal' : 'error'"
+              >
+                <span class="status-icon">{{ detailData.status === '正常' ? '✓' : '✗' }}</span>
+                <span>{{ detailData.status }}</span>
+              </div>
+            </div>
+
+            <!-- 异常原因 -->
+            <div v-if="detailData.reasons.length > 0" class="detail-section">
+              <div class="section-title">异常原因</div>
+              <div class="reason-list">
+                <span
+                  v-for="reason in detailData.reasons"
+                  :key="reason"
+                  class="reason-tag"
+                >
+                  {{ reason }}
+                </span>
+              </div>
+            </div>
+
+            <!-- 基准 IP -->
+            <div class="detail-section">
+              <div class="section-title">基准 IP (Google / Cloudflare)</div>
+              <div class="ip-box">
+                <div v-if="detailData.baseline.ips.length === 0" class="ip-item empty">
+                  无结果
+                </div>
+                <div
+                  v-for="ip in detailData.baseline.ips"
+                  :key="ip"
+                  class="ip-item"
+                >
+                  {{ ip }}
+                </div>
+              </div>
+            </div>
+
+            <!-- 台湾解析器结果 -->
+            <div class="detail-section">
+              <div class="section-title">台湾 DNS 解析结果</div>
+              <div
+                v-for="r in detailData.tw"
+                :key="r.resolver"
+                class="resolver-card"
+              >
+                <div class="resolver-header">
+                  <div class="resolver-info">
+                    <div class="resolver-name">{{ r.name }}</div>
+                    <div class="resolver-ip">{{ r.resolver }}</div>
+                  </div>
+                  <span
+                    class="category-badge"
+                    :class="getCategoryClass(r.category)"
+                  >
+                    {{ r.category }}
+                  </span>
+                </div>
+                <div class="resolver-ips">
+                  <span v-if="r.ips.length === 0" class="resolver-ip-tag error">
+                    {{ r.msg || '无结果' }}
+                  </span>
+                  <span
+                    v-for="ip in r.ips"
+                    :key="ip"
+                    class="resolver-ip-tag"
+                    :class="getIpClass(ip, detailData.baseline.ips, r.category)"
+                  >
+                    {{ ip }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </template>
         </div>
       </div>
     </div>
-
-    <!-- 历史记录 -->
-    <section v-if="history.length > 0" class="history-section">
-      <div class="history-header">
-        <span>📜 历史</span>
-        <button class="clear-btn" @click="clearHistory">清空</button>
-      </div>
-      <div class="history-list">
-        <div v-for="item in history.slice(0, 5)" :key="item.ts" class="history-item" @click="queryFromHistory(item.domain)">
-          <span class="h-domain">{{ item.domain }}</span>
-          <span class="h-status" :class="{ ok: item.status === 'OK', error: item.status === '异常', warn: item.status === '不确定' }">{{ item.status }}</span>
-        </div>
-      </div>
-    </section>
   </div>
 </template>
+
+<style scoped>
+.app {
+  min-height: 100vh;
+}
+</style>
