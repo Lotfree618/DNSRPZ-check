@@ -4,6 +4,7 @@ from typing import Dict, List, Set
 import dns.resolver
 import dns.asyncresolver
 from . import config
+from .redirect_trace import trace_redirects
 
 
 async def query_resolver(domain: str, server_ip: str, timeout: float) -> Dict:
@@ -78,8 +79,12 @@ async def probe_domain(domain: str) -> Dict:
         else:
             tw_results.append(item)
     
+    # 执行跳转追踪
+    redirect_result = await trace_redirects(domain)
+    
     return {
         "domain": domain,
         "baseline": baseline_results,
-        "tw": tw_results
+        "tw": tw_results,
+        "redirect_trace": redirect_result
     }

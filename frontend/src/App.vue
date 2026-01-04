@@ -101,6 +101,15 @@ function getIpClass(ip, baselineIps, category) {
   return ''
 }
 
+// 获取HTTP状态码样式
+function getStatusClass(status) {
+  if (!status || status === 0) return 'error'
+  if (status >= 200 && status < 300) return 'success'
+  if (status >= 300 && status < 400) return 'redirect'
+  if (status >= 400) return 'error'
+  return ''
+}
+
 // 定时刷新
 let timer = null
 
@@ -275,6 +284,52 @@ onUnmounted(() => {
                   >
                     {{ ip }}
                   </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 域名跳转追踪 -->
+            <div v-if="detailData.redirect_trace" class="detail-section">
+              <div class="section-title">域名跳转追踪</div>
+              <div class="redirect-trace-box">
+                <!-- 错误状态 -->
+                <div v-if="detailData.redirect_trace.error" class="redirect-error">
+                  <span class="error-icon">⚠</span>
+                  {{ detailData.redirect_trace.error }}
+                </div>
+                
+                <!-- 跳转链 -->
+                <div v-if="detailData.redirect_trace.chain.length > 0" class="redirect-chain">
+                  <div
+                    v-for="(step, idx) in detailData.redirect_trace.chain"
+                    :key="idx"
+                    class="redirect-step"
+                  >
+                    <span class="step-number">{{ idx + 1 }}</span>
+                    <span 
+                      class="step-status"
+                      :class="getStatusClass(step.status)"
+                    >
+                      {{ step.status || '失败' }}
+                    </span>
+                    <span class="step-url">{{ step.url }}</span>
+                  </div>
+                </div>
+
+                <!-- 最终域名 -->
+                <div v-if="detailData.redirect_trace.final_domain" class="final-domain">
+                  <span class="final-label">最终域名:</span>
+                  <span class="final-value">{{ detailData.redirect_trace.final_domain }}</span>
+                  <span 
+                    v-if="detailData.redirect_trace.success"
+                    class="success-badge"
+                  >✓ 可达</span>
+                  <span v-else class="fail-badge">✗ 不可达</span>
+                </div>
+                
+                <!-- 无跳转 -->
+                <div v-if="detailData.redirect_trace.chain.length === 0 && !detailData.redirect_trace.error" class="no-redirect">
+                  无法获取跳转信息
                 </div>
               </div>
             </div>

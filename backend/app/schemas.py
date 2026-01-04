@@ -30,6 +30,21 @@ class DomainSummary(BaseModel):
     last_probe_at: str
 
 
+class RedirectStep(BaseModel):
+    """单步跳转信息"""
+    url: str
+    status: int
+
+
+class RedirectTrace(BaseModel):
+    """跳转追踪结果"""
+    final_url: Optional[str] = None
+    final_domain: Optional[str] = None
+    chain: List[RedirectStep] = []
+    success: bool = False
+    error: Optional[str] = None
+
+
 class DomainDetail(BaseModel):
     """域名详情"""
     domain: str
@@ -37,6 +52,7 @@ class DomainDetail(BaseModel):
     reasons: List[str]
     baseline: BaselineInfo
     tw: List[TwResolverResult]
+    redirect_trace: Optional[RedirectTrace] = None
     last_probe_at: str
 
 

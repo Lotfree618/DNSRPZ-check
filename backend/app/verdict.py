@@ -47,6 +47,7 @@ def aggregate_verdict(probe_result: Dict) -> Dict:
     domain = probe_result["domain"]
     baseline_results = probe_result["baseline"]
     tw_results = probe_result["tw"]
+    redirect_trace = probe_result.get("redirect_trace")
     
     # 构建基准 IP 集合
     baseline_ips = set()
@@ -108,5 +109,6 @@ def aggregate_verdict(probe_result: Dict) -> Dict:
             "ips": sorted(baseline_ips),
             "detail": baseline_results
         },
-        "tw": tw_classified
+        "tw": tw_classified,
+        "redirect_trace": redirect_trace
     }
