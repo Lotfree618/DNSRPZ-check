@@ -356,7 +356,7 @@ body {
 }
 
 .category-badge.normal,
-.category-badge.empty-resolve {
+.category-badge.empty {
   background: rgba(22, 163, 74, 0.15);
   color: var(--accent-green);
 }
@@ -404,12 +404,6 @@ body {
 .resolver-ip-tag.error {
   color: var(--accent-red);
   border-color: rgba(220, 38, 38, 0.3);
-}
-
-.resolver-ip-tag.empty {
-  color: var(--accent-green);
-  border-color: rgba(22, 163, 74, 0.3);
-  font-style: italic;
 }
 
 /* 加载状态 */

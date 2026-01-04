@@ -13,10 +13,15 @@ const lastUpdate = ref(null)
 // API 基础地址
 const API_BASE = import.meta.env.PROD ? '' : 'http://localhost:8000'
 
+// 判断是否为正常状态（包括正常和空解析）
+function isNormalStatus(status) {
+  return status === '正常' || status === '空解析'
+}
+
 // 计算统计
 const stats = computed(() => {
   const total = domains.value.length
-  const normal = domains.value.filter(d => d.status === '正常').length
+  const normal = domains.value.filter(d => isNormalStatus(d.status)).length
   const abnormal = total - normal
   return { total, normal, abnormal }
 })
@@ -71,7 +76,7 @@ function formatTime(isoStr) {
 function getCategoryClass(category) {
   const map = {
     '正常': 'normal',
-    '空解析': 'empty-resolve',
+    '空解析': 'empty',
     '解析差异': 'diff',
     '被阻断': 'blocked',
     '已封锁': 'banned',
@@ -88,8 +93,7 @@ function isIpMatched(ip, baselineIps) {
 
 // 获取 IP 标签样式
 function getIpClass(ip, baselineIps, category) {
-  if (category === '正常') return 'match'
-  if (category === '空解析') return 'empty'
+  if (category === '正常' || category === '空解析') return 'match'
   if (category === '解析差异') {
     return isIpMatched(ip, baselineIps) ? 'match' : 'diff'
   }
@@ -163,7 +167,7 @@ onUnmounted(() => {
           >
             <div
               class="status-dot"
-              :class="item.status === '正常' ? 'normal' : 'error'"
+              :class="isNormalStatus(item.status) ? 'normal' : 'error'"
             ></div>
             <div class="domain-info">
               <div class="domain-name">{{ item.domain }}</div>
@@ -171,7 +175,7 @@ onUnmounted(() => {
             </div>
             <div
               class="status-badge"
-              :class="item.status === '正常' ? 'normal' : 'error'"
+              :class="isNormalStatus(item.status) ? 'normal' : 'error'"
             >
               {{ item.status }}
             </div>
@@ -201,9 +205,9 @@ onUnmounted(() => {
               <div class="section-title">检测结果</div>
               <div
                 class="status-display"
-                :class="detailData.status === '正常' ? 'normal' : 'error'"
+                :class="isNormalStatus(detailData.status) ? 'normal' : 'error'"
               >
-                <span class="status-icon">{{ detailData.status === '正常' ? '✓' : '✗' }}</span>
+                <span class="status-icon">{{ isNormalStatus(detailData.status) ? '✓' : '✗' }}</span>
                 <span>{{ detailData.status }}</span>
               </div>
             </div>
@@ -260,8 +264,8 @@ onUnmounted(() => {
                   </span>
                 </div>
                 <div class="resolver-ips">
-                  <span v-if="r.ips.length === 0" class="resolver-ip-tag" :class="r.category === '空解析' ? 'empty' : 'error'">
-                    {{ r.category === '空解析' ? '空解析' : (r.msg || '无结果') }}
+                  <span v-if="r.ips.length === 0" class="resolver-ip-tag error">
+                    {{ r.msg || '无结果' }}
                   </span>
                   <span
                     v-for="ip in r.ips"
