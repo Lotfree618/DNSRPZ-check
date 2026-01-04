@@ -2,8 +2,21 @@
 # 支持 URL 格式，会自动提取域名
 # 空行和以 # 开头的行会被忽略
 
-google.com
-youtube.com
-github.com
-example.com
-cloudflare.com
+avparforevershop.com
+avparforeverhub.com
+avparforeverstore.com
+avparforeveronline.com
+avparforeverweb.com
+fashionsfive.com
+fashionssix.com
+www.zerorelx.com
+jxvapeshop.com
+jkvaporkingshoptwo.com
+avaporforerverapp.com
+avapeforeverssshop.com
+avaporforever4.com
+avapeforeverking.com
+avparforeverking.com
+fashionsnine.net
+httpsfashionsnine.com
+twluck.com

@@ -71,6 +71,7 @@ function formatTime(isoStr) {
 function getCategoryClass(category) {
   const map = {
     '正常': 'normal',
+    '空解析': 'empty-resolve',
     '解析差异': 'diff',
     '被阻断': 'blocked',
     '已封锁': 'banned',
@@ -88,6 +89,7 @@ function isIpMatched(ip, baselineIps) {
 // 获取 IP 标签样式
 function getIpClass(ip, baselineIps, category) {
   if (category === '正常') return 'match'
+  if (category === '空解析') return 'empty'
   if (category === '解析差异') {
     return isIpMatched(ip, baselineIps) ? 'match' : 'diff'
   }
@@ -258,8 +260,8 @@ onUnmounted(() => {
                   </span>
                 </div>
                 <div class="resolver-ips">
-                  <span v-if="r.ips.length === 0" class="resolver-ip-tag error">
-                    {{ r.msg || '无结果' }}
+                  <span v-if="r.ips.length === 0" class="resolver-ip-tag" :class="r.category === '空解析' ? 'empty' : 'error'">
+                    {{ r.category === '空解析' ? '空解析' : (r.msg || '无结果') }}
                   </span>
                   <span
                     v-for="ip in r.ips"
