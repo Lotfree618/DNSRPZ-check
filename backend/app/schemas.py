@@ -66,3 +66,15 @@ class StatusResponse(BaseModel):
 class HealthResponse(BaseModel):
     """健康检查响应"""
     ok: bool
+
+
+class CheckResponse(BaseModel):
+    """单域名检测响应"""
+    domain: str
+    available: bool  # 域名是否可用（True=未被污染）
+    status: str  # 正常, 异常, 空解析
+    reasons: List[str]  # 异常原因列表
+    baseline: BaselineInfo
+    tw: List[TwResolverResult]
+    redirect_trace: Optional[RedirectTrace] = None
+    checked_at: str
