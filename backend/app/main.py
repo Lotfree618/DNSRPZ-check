@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import config
 from .domains import load_domains
-from .dns_probe import probe_domain
+from .dns_probe import probe_domain, probe_domain_simple
 from .verdict import aggregate_verdict
 from .store import store
 from .schemas import StatusResponse, DomainSummary, DomainDetail, HealthResponse, CheckResponse
@@ -110,25 +110,22 @@ async def detail(domain: str = Query(..., description="域名")):
 @app.get("/api/check", response_model=CheckResponse)
 async def check_domain(domain: str = Query(..., description="要检测的域名")):
     """
-    实时检测单个域名的污染状态
+    简化版域名污染检测 API（供 Orchestrator Worker 调用）
     
-    - **domain**: 要检测的域名（如 example.com）
-    - 返回域名的可用性（是否被污染）和详细解析结果
+    - **domain**: 要检测的域名
+    - 返回 dns_ok/http_ok/latency_ms/status_code
+    - 不做重定向追踪，提升响应速度
     """
-    # 实时探测
-    result = await probe_domain(domain)
+    result = await probe_domain_simple(domain)
     verdict = aggregate_verdict(result)
     
-    # 判断可用性：status 为 "正常" 或 "空解析" 时视为可用
-    available = verdict["status"] in ("正常", "空解析")
+    # DNS 是否正常：status 为 "正常" 或 "空解析" 时视为健康
+    dns_ok = verdict["status"] in ("正常", "空解析")
     
     return CheckResponse(
-        domain=domain,
-        available=available,
-        status=verdict["status"],
-        reasons=verdict["reasons"],
-        baseline=verdict["baseline"],
-        tw=verdict["tw"],
-        redirect_trace=verdict.get("redirect_trace"),
-        checked_at=datetime.now(timezone.utc).isoformat()
+        dns_ok=dns_ok,
+        http_ok=dns_ok,  # 简化：与 dns_ok 一致
+        latency_ms=result.get("latency_ms", 0),
+        status_code=200 if dns_ok else 0
     )
+
