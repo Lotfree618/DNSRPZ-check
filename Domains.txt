@@ -2,11 +2,6 @@
 # 支持 URL 格式，会自动提取域名
 # 空行和以 # 开头的行会被忽略
 
-avparforevershop.com
-avparforeverhub.com
-avparforeverstore.com
-avparforeveronline.com
-avparforeverweb.com
 fashionsfive.com
 fashionssix.com
 www.zerorelx.com
