@@ -13,7 +13,7 @@ const lastUpdate = ref(null)
 // API 基础地址
 const API_BASE = import.meta.env.PROD ? '' : 'http://localhost:8000'
 
-// 判断是否为正常状态（包括正常和空解析）
+// 判斷是否為正常狀態（包括正常和空解析）
 function isNormalStatus(status) {
   return status === '正常' || status === '空解析'
 }
@@ -26,14 +26,14 @@ const stats = computed(() => {
   return { total, normal, abnormal }
 })
 
-// 获取状态列表
+// 取得狀態列表
 async function fetchStatus() {
   try {
     const res = await fetch(`${API_BASE}/api/status`)
-    if (!res.ok) throw new Error('API 请求失败')
+    if (!res.ok) throw new Error('API 請求失敗')
     const data = await res.json()
     domains.value = data.domains
-    lastUpdate.value = new Date().toLocaleTimeString('zh-CN')
+    lastUpdate.value = new Date().toLocaleTimeString('zh-TW')
     error.value = null
   } catch (e) {
     error.value = e.message
@@ -42,7 +42,7 @@ async function fetchStatus() {
   }
 }
 
-// 获取域名详情
+// 取得網域詳情
 async function fetchDetail(domain) {
   selectedDomain.value = domain
   detailLoading.value = true
@@ -50,7 +50,7 @@ async function fetchDetail(domain) {
   
   try {
     const res = await fetch(`${API_BASE}/api/detail?domain=${encodeURIComponent(domain)}`)
-    if (!res.ok) throw new Error('获取详情失败')
+    if (!res.ok) throw new Error('取得詳情失敗')
     detailData.value = await res.json()
   } catch (e) {
     console.error(e)
@@ -59,49 +59,49 @@ async function fetchDetail(domain) {
   }
 }
 
-// 关闭弹窗
+// 關閉彈窗
 function closeModal() {
   selectedDomain.value = null
   detailData.value = null
 }
 
-// 格式化时间
+// 格式化時間
 function formatTime(isoStr) {
   if (!isoStr) return '-'
   const d = new Date(isoStr)
-  return d.toLocaleTimeString('zh-CN')
+  return d.toLocaleTimeString('zh-TW')
 }
 
-// 获取分类样式类
+// 取得分類樣式類
 function getCategoryClass(category) {
   const map = {
     '正常': 'normal',
     '空解析': 'empty',
-    '解析差异': 'diff',
-    '被阻断': 'blocked',
-    '已封锁': 'banned',
-    '超时': 'timeout',
-    '错误': 'error'
+    '解析差異': 'diff',
+    '被阻斷': 'blocked',
+    '已封鎖': 'banned',
+    '逾時': 'timeout',
+    '錯誤': 'error'
   }
   return map[category] || 'error'
 }
 
-// 判断 IP 是否匹配基准
+// 判斷 IP 是否符合基準
 function isIpMatched(ip, baselineIps) {
   return baselineIps && baselineIps.includes(ip)
 }
 
-// 获取 IP 标签样式
+// 取得 IP 標籤樣式
 function getIpClass(ip, baselineIps, category) {
   if (category === '正常' || category === '空解析') return 'match'
-  if (category === '解析差异') {
+  if (category === '解析差異') {
     return isIpMatched(ip, baselineIps) ? 'match' : 'diff'
   }
-  if (['被阻断', '已封锁', '超时', '错误'].includes(category)) return 'error'
+  if (['被阻斷', '已封鎖', '逾時', '錯誤'].includes(category)) return 'error'
   return ''
 }
 
-// 获取HTTP状态码样式
+// 取得 HTTP 狀態碼樣式
 function getStatusClass(status) {
   if (!status || status === 0) return 'error'
   if (status >= 200 && status < 300) return 'success'
@@ -110,7 +110,7 @@ function getStatusClass(status) {
   return ''
 }
 
-// 定时刷新
+// 定時更新
 let timer = null
 
 onMounted(() => {
@@ -125,25 +125,25 @@ onUnmounted(() => {
 
 <template>
   <div class="app">
-    <!-- 头部 -->
+    <!-- 標題 -->
     <header class="header">
-      <h1>🌐 域名台湾DNS RPZ检测</h1>
-      <p>实时检测域名在台湾DNS解析器（中华电信、Twnic）的可用性</p>
+      <h1>🌐 網域台灣 DNS RPZ 檢測</h1>
+      <p>即時檢測網域在台灣 DNS 解析器（中華電信、Twnic）的可用性</p>
     </header>
 
     <main class="container">
-      <!-- 加载状态 -->
+      <!-- 載入狀態 -->
       <div v-if="loading" class="loading">
         <div class="spinner"></div>
-        <p>正在加载数据...</p>
+        <p>正在載入資料...</p>
       </div>
 
-      <!-- 主内容 -->
+      <!-- 主內容 -->
       <template v-else>
-        <!-- 统计卡片 -->
+        <!-- 統計卡片 -->
         <div class="stats-row">
           <div class="stat-card">
-            <div class="label">监控域名</div>
+            <div class="label">監控網域</div>
             <div class="value">{{ stats.total }}</div>
           </div>
           <div class="stat-card">
@@ -151,22 +151,22 @@ onUnmounted(() => {
             <div class="value normal">● {{ stats.normal }}</div>
           </div>
           <div class="stat-card">
-            <div class="label">异常</div>
+            <div class="label">異常</div>
             <div class="value error">● {{ stats.abnormal }}</div>
           </div>
           <div class="stat-card">
-            <div class="label">最后更新</div>
+            <div class="label">最後更新</div>
             <div class="value" style="font-size: 1.1rem;">{{ lastUpdate || '-' }}</div>
           </div>
         </div>
 
-        <!-- 空状态 -->
+        <!-- 空狀態 -->
         <div v-if="domains.length === 0" class="empty-state">
-          <p>暂无监控域名</p>
-          <p style="font-size: 0.85rem; margin-top: 8px;">请在服务器 Domains.txt 中添加域名</p>
+          <p>尚無監控網域</p>
+          <p style="font-size: 0.85rem; margin-top: 8px;">請在伺服器 Domains.txt 中新增網域</p>
         </div>
 
-        <!-- 域名列表 -->
+        <!-- 網域列表 -->
         <div v-else class="domain-list">
           <div
             v-for="item in domains"
@@ -193,7 +193,7 @@ onUnmounted(() => {
       </template>
     </main>
 
-    <!-- 详情弹窗 -->
+    <!-- 詳情彈窗 -->
     <div v-if="selectedDomain" class="modal-overlay" @click.self="closeModal">
       <div class="modal">
         <div class="modal-header">
@@ -202,16 +202,16 @@ onUnmounted(() => {
         </div>
 
         <div class="modal-body">
-          <!-- 加载中 -->
+          <!-- 載入中 -->
           <div v-if="detailLoading" class="loading">
             <div class="spinner"></div>
           </div>
 
-          <!-- 详情内容 -->
+          <!-- 詳情內容 -->
           <template v-else-if="detailData">
-            <!-- 状态 -->
+            <!-- 狀態 -->
             <div class="detail-section">
-              <div class="section-title">检测结果</div>
+              <div class="section-title">檢測結果</div>
               <div
                 class="status-display"
                 :class="isNormalStatus(detailData.status) ? 'normal' : 'error'"
@@ -221,9 +221,9 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <!-- 异常原因 -->
+            <!-- 異常原因 -->
             <div v-if="detailData.reasons.length > 0" class="detail-section">
-              <div class="section-title">异常原因</div>
+              <div class="section-title">異常原因</div>
               <div class="reason-list">
                 <span
                   v-for="reason in detailData.reasons"
@@ -235,12 +235,12 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <!-- 基准 IP -->
+            <!-- 基準 IP -->
             <div class="detail-section">
-              <div class="section-title">基准 IP (Google / Cloudflare)</div>
+              <div class="section-title">基準 IP (Google / Cloudflare)</div>
               <div class="ip-box">
                 <div v-if="detailData.baseline.ips.length === 0" class="ip-item empty">
-                  无结果
+                  無結果
                 </div>
                 <div
                   v-for="ip in detailData.baseline.ips"
@@ -252,9 +252,9 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <!-- 台湾解析器结果 -->
+            <!-- 台灣解析器結果 -->
             <div class="detail-section">
-              <div class="section-title">台湾 DNS 解析结果</div>
+              <div class="section-title">台灣 DNS 解析結果</div>
               <div
                 v-for="r in detailData.tw"
                 :key="r.resolver"
@@ -274,7 +274,7 @@ onUnmounted(() => {
                 </div>
                 <div class="resolver-ips">
                   <span v-if="r.ips.length === 0" class="resolver-ip-tag error">
-                    {{ r.msg || '无结果' }}
+                    {{ r.msg || '無結果' }}
                   </span>
                   <span
                     v-for="ip in r.ips"
@@ -288,17 +288,17 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <!-- 域名跳转追踪 -->
+            <!-- 網域跳轉追蹤 -->
             <div v-if="detailData.redirect_trace" class="detail-section">
-              <div class="section-title">域名跳转追踪</div>
+              <div class="section-title">網域跳轉追蹤</div>
               <div class="redirect-trace-box">
-                <!-- 错误状态 -->
+                <!-- 錯誤狀態 -->
                 <div v-if="detailData.redirect_trace.error" class="redirect-error">
                   <span class="error-icon">⚠</span>
                   {{ detailData.redirect_trace.error }}
                 </div>
                 
-                <!-- 跳转链 -->
+                <!-- 跳轉鏈 -->
                 <div v-if="detailData.redirect_trace.chain.length > 0" class="redirect-chain">
                   <div
                     v-for="(step, idx) in detailData.redirect_trace.chain"
@@ -310,26 +310,26 @@ onUnmounted(() => {
                       class="step-status"
                       :class="getStatusClass(step.status)"
                     >
-                      {{ step.status || '失败' }}
+                      {{ step.status || '失敗' }}
                     </span>
                     <span class="step-url">{{ step.url }}</span>
                   </div>
                 </div>
 
-                <!-- 最终域名 -->
+                <!-- 最終網域 -->
                 <div v-if="detailData.redirect_trace.final_domain" class="final-domain">
-                  <span class="final-label">最终域名:</span>
+                  <span class="final-label">最終網域:</span>
                   <span class="final-value">{{ detailData.redirect_trace.final_domain }}</span>
                   <span 
                     v-if="detailData.redirect_trace.success"
                     class="success-badge"
-                  >✓ 可达</span>
-                  <span v-else class="fail-badge">✗ 不可达</span>
+                  >✓ 可達</span>
+                  <span v-else class="fail-badge">✗ 無法連線</span>
                 </div>
                 
-                <!-- 无跳转 -->
+                <!-- 無跳轉 -->
                 <div v-if="detailData.redirect_trace.chain.length === 0 && !detailData.redirect_trace.error" class="no-redirect">
-                  无法获取跳转信息
+                  無法取得跳轉資訊
                 </div>
               </div>
             </div>
