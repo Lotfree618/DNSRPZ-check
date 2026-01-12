@@ -569,12 +569,9 @@ onUnmounted(() => {
     <header class="header">
       <div class="header-content">
         <div class="logo">
-          <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <circle cx="12" cy="12" r="10"/>
-            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-          </svg>
+          <img class="logo-icon" src="/veteran-ads-logo-transparent.png" alt="老兵污染檢測" />
           <div>
-            <h1>DNS RPZ 檢測</h1>
+            <h1>老兵污染檢測</h1>
             <p>台灣網域可用性即時監控</p>
           </div>
         </div>
