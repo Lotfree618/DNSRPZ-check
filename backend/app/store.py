@@ -1,23 +1,30 @@
-"""内存缓存存储"""
+"""內存緩存存儲"""
 from datetime import datetime, timezone
 from typing import Dict, Optional
 
 
 class Store:
-    """存储探测结果的内存缓存"""
+    """存儲探測結果的內存緩存"""
     
     def __init__(self):
         self._results: Dict[str, Dict] = {}
         self._last_probe: Optional[str] = None
     
     def update(self, domain: str, result: Dict):
-        """更新域名探测结果"""
+        """更新網域探測結果，並同步 polluted 狀態到 JSON"""
         now = datetime.now(timezone.utc).isoformat()
         self._results[domain] = {
             **result,
             "last_probe_at": now
         }
         self._last_probe = now
+        
+        # 同步 polluted 狀態和檢測時間到 domains.json
+        from .domains import update_polluted
+        status = result.get("status", "")
+        # 非正常狀態視為污染
+        is_polluted = status not in ("正常", "空解析")
+        update_polluted(domain, is_polluted, now)
     
     def get_all(self) -> Dict[str, Dict]:
         """获取所有域名结果"""
