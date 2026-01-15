@@ -1187,7 +1187,9 @@ body {
   font-family: 'Roboto Mono', monospace;
   font-size: 0.75rem;
   color: var(--md-on-surface-variant);
-  word-break: break-all;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .step-domain-status {
