@@ -51,8 +51,13 @@ async def trace_redirects(
                         location = resp.headers.get("location", "")
                         if not location:
                             break
-                        # 处理相对路径
-                        if location.startswith("/"):
+                        # 处理相对路径和 protocol-relative URL
+                        if location.startswith("//"):
+                            # Protocol-relative URL (如 //www.example.com/path)
+                            parsed = urlparse(url)
+                            location = f"{parsed.scheme}:{location}"
+                        elif location.startswith("/"):
+                            # 普通相对路径 (如 /path/to/page)
                             parsed = urlparse(url)
                             location = f"{parsed.scheme}://{parsed.netloc}{location}"
                         url = location

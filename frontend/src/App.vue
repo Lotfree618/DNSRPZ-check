@@ -672,18 +672,31 @@ async function quickAddDomain(domain) {
   } catch {}
 }
 
-// 快捷切換上報狀態
+// 快捷切換上報狀態（樂觀更新）
 async function quickToggleReported(domain, event) {
   if (event) event.stopPropagation()
+  
+  // 樂觀更新：立即在 UI 上切換狀態
+  const item = domains.value.find(d => d.domain === domain)
+  if (item) {
+    item.reported = !item.reported
+  }
   
   try {
     const res = await fetch(`${API_BASE}/api/domains/${encodeURIComponent(domain)}/reported`, {
       method: 'PATCH'
     })
     if (res.ok) {
-      await fetchDomains()
+      // 後台靜默刷新，不阻塞 UI
+      fetchDomains()
+    } else {
+      // 請求失敗時回滾狀態
+      if (item) item.reported = !item.reported
     }
-  } catch {}
+  } catch {
+    // 網路錯誤時回滾狀態
+    if (item) item.reported = !item.reported
+  }
 }
 
 // 導出網域列表
