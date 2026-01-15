@@ -678,31 +678,26 @@ async function quickToggleReported(domain, event) {
   
   // 樂觀更新：立即在 UI 上切換狀態
   const item = domains.value.find(d => d.domain === domain)
+  const originalState = item?.reported
   if (item) {
     item.reported = !item.reported
   }
   
   try {
-    // 設置較長的超時時間（3秒），適配高延遲部署環境
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 3000)
-    
     const res = await fetch(`${API_BASE}/api/domains/${encodeURIComponent(domain)}/reported`, {
-      method: 'PATCH',
-      signal: controller.signal
+      method: 'PATCH'
     })
-    clearTimeout(timeoutId)
-    
     if (res.ok) {
-      // 後台靜默刷新，不阻塞 UI
-      fetchDomains()
+      // 用 API 返回值確認狀態
+      const data = await res.json()
+      if (item) item.reported = data.reported
     } else {
       // 請求失敗時回滾狀態
-      if (item) item.reported = !item.reported
+      if (item) item.reported = originalState
     }
   } catch {
-    // 網路錯誤或超時回滾狀態
-    if (item) item.reported = !item.reported
+    // 網路錯誤回滾狀態
+    if (item) item.reported = originalState
   }
 }
 
