@@ -683,9 +683,16 @@ async function quickToggleReported(domain, event) {
   }
   
   try {
+    // 設置較長的超時時間（3秒），適配高延遲部署環境
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 3000)
+    
     const res = await fetch(`${API_BASE}/api/domains/${encodeURIComponent(domain)}/reported`, {
-      method: 'PATCH'
+      method: 'PATCH',
+      signal: controller.signal
     })
+    clearTimeout(timeoutId)
+    
     if (res.ok) {
       // 後台靜默刷新，不阻塞 UI
       fetchDomains()
@@ -694,7 +701,7 @@ async function quickToggleReported(domain, event) {
       if (item) item.reported = !item.reported
     }
   } catch {
-    // 網路錯誤時回滾狀態
+    // 網路錯誤或超時回滾狀態
     if (item) item.reported = !item.reported
   }
 }
