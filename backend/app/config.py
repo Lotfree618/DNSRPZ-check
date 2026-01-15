@@ -28,9 +28,20 @@ TW_TIMEOUT = 4
 # 探测间隔（秒）
 PROBE_INTERVAL = 300
 
+# 异常域名探测间隔（秒），默认24小时
+ABNORMAL_PROBE_INTERVAL = 300
+
 # 并发限制
 MAX_CONCURRENCY = 50
+
+# HTTP 重定向追踪最大跳转次数
+MAX_REDIRECTS = 10
 
 # Domains.txt 路径
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DOMAINS_FILE = os.environ.get("DOMAINS_FILE", str(BASE_DIR / "Domains.txt"))
+
+# 日志配置（DEBUG=调试模式，WARNING=安静模式）
+import logging
+LOG_LEVEL = logging.WARNING
+LOG_FILE = "probe_debug.log"

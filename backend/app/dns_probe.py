@@ -1,11 +1,14 @@
 """DNS 查询模块"""
 import asyncio
+import logging
 import time
 from typing import Dict
 import dns.resolver
 import dns.asyncresolver
 from . import config
 from .redirect_trace import trace_redirects
+
+logger = logging.getLogger(__name__)
 
 
 async def query_resolver(domain: str, server_ip: str, timeout: float) -> Dict:
@@ -59,10 +62,25 @@ async def probe_domain(domain: str, with_redirect_trace: bool = True) -> Dict:
     for ip, name in config.TW_RESOLVERS.items():
         tasks.append(("tw", ip, name, config.TW_TIMEOUT))
     
-    results = await asyncio.gather(
-        *[query_resolver(domain, ip, timeout) for _, ip, _, timeout in tasks],
-        return_exceptions=True
-    )
+    logger.debug(f"[probe] 開始探測 {domain}，共 {len(tasks)} 個 DNS 服務器")
+    
+    try:
+        results = await asyncio.wait_for(
+            asyncio.gather(
+                *[query_resolver(domain, ip, timeout) for _, ip, _, timeout in tasks],
+                return_exceptions=True
+            ),
+            timeout=30  # 總超時 30 秒
+        )
+    except asyncio.TimeoutError:
+        logger.error(f"[probe] 探測 {domain} 總超時(30秒)")
+        return {
+            "domain": domain,
+            "baseline": [],
+            "tw": [],
+            "redirect_trace": None,
+            "latency_ms": 30000
+        }
     
     baseline_results = []
     tw_results = []
@@ -70,6 +88,7 @@ async def probe_domain(domain: str, with_redirect_trace: bool = True) -> Dict:
     for i, (type_, ip, name, _) in enumerate(tasks):
         res = results[i]
         if isinstance(res, Exception):
+            logger.warning(f"[probe] {domain} DNS查詢異常 {ip}({name}): {res}")
             res = {"status": "error", "ips": [], "msg": str(res)}
         
         item = {"resolver": ip, "name": name, **res}
@@ -80,14 +99,40 @@ async def probe_domain(domain: str, with_redirect_trace: bool = True) -> Dict:
             tw_results.append(item)
     
     redirect_result = None
+    # 提前計算 baseline_ips，避免在 verdict 中重複計算
+    baseline_ips = set()
+    for r in baseline_results:
+        if r.get("status") == "ok":
+            baseline_ips.update(r.get("ips", []))
+    
     if with_redirect_trace:
-        redirect_result = await trace_redirects(domain)
+        # 先對 tw_results 進行分類，以便傳給 trace_redirects
+        from .verdict import classify_tw_result
+        
+        tw_classified = []
+        for r in tw_results:
+            category = classify_tw_result(r, baseline_ips)
+            tw_classified.append({**r, "category": category})
+        
+        try:
+            redirect_result = await asyncio.wait_for(
+                trace_redirects(domain, current_tw_results=tw_classified),
+                timeout=30  # 重定向追蹤超時
+            )
+        except asyncio.TimeoutError:
+            logger.warning(f"[probe] {domain} 重定向追蹤超時(30秒)")
+            redirect_result = {"success": False, "error": "重定向追蹤超時", "chain": []}
+        except Exception as e:
+            logger.error(f"[probe] {domain} 重定向追蹤異常: {e}")
+            redirect_result = {"success": False, "error": str(e), "chain": []}
     
     latency_ms = int((time.perf_counter() - start_time) * 1000)
+    logger.debug(f"[probe] 探測 {domain} 完成，耗時 {latency_ms}ms")
     
     return {
         "domain": domain,
         "baseline": baseline_results,
+        "baseline_ips": sorted(baseline_ips),  # 預計算的基準 IP
         "tw": tw_results,
         "redirect_trace": redirect_result,
         "latency_ms": latency_ms

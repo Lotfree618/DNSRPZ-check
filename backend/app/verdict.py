@@ -1,4 +1,4 @@
-"""结果判定与聚合"""
+"""結果判定與聚合"""
 from typing import Dict, List, Set
 from . import config
 
@@ -7,68 +7,63 @@ def classify_tw_result(
     result: Dict,
     baseline_ips: Set[str]
 ) -> str:
-    """对台湾解析器结果进行分类"""
+    """對台灣解析器結果進行分類"""
     status = result.get("status")
     ips = set(result.get("ips", []))
     
+    # 解析失敗情況
     if status == "timeout":
-        return "超时"
+        return "逾時"
     if status == "error":
-        return "错误"
+        # SERVFAIL 等錯誤視為解析失敗
+        return "解析失敗"
     if status == "nxdomain":
-        # 如果基准也为空，则不算被阻断
-        if not baseline_ips:
-            return "空解析"
-        return "被阻断"
+        # NXDOMAIN 視為正常（域名不存在）
+        return "正常"
     
     # status == "ok"
     if not ips:
-        # 如果基准也为空，则为空解析
-        if not baseline_ips:
-            return "空解析"
-        return "被阻断"
-    
-    # 检查是否命中黑名单
-    if ips & config.BLOCK_PAGE_IPS:
-        return "已封锁"
-    
-    # 检查是否为基准子集
-    if not baseline_ips:
-        return "空解析"
-    
-    if ips.issubset(baseline_ips):
+        # 無 IP 返回，視為正常（未被污染）
         return "正常"
     
-    return "解析差异"
+    # 檢查是否命中黑名單
+    if ips & config.BLOCK_PAGE_IPS:
+        return "已封鎖"
+    
+    # 檢查是否為基準子集（正常）
+    if baseline_ips and ips.issubset(baseline_ips):
+        return "正常"
+    
+    # 有解析差異但未命中黑名單
+    if baseline_ips and not ips.issubset(baseline_ips):
+        return "解析差異"
+    
+    # 無基準時有 IP 視為正常
+    return "正常"
 
 
 def aggregate_verdict(probe_result: Dict) -> Dict:
-    """聚合域名级判定结果"""
+    """聚合域名級判定結果"""
     domain = probe_result["domain"]
     baseline_results = probe_result["baseline"]
     tw_results = probe_result["tw"]
     redirect_trace = probe_result.get("redirect_trace")
     
-    # 构建基准 IP 集合
-    baseline_ips = set()
-    for r in baseline_results:
-        if r.get("status") == "ok":
-            baseline_ips.update(r.get("ips", []))
+    # 優先使用預計算的 baseline_ips，避免重複計算
+    if "baseline_ips" in probe_result:
+        baseline_ips = set(probe_result["baseline_ips"])
+    else:
+        # 兼容舊格式：從 baseline_results 構建
+        baseline_ips = set()
+        for r in baseline_results:
+            if r.get("status") == "ok":
+                baseline_ips.update(r.get("ips", []))
     
-    # 检查台湾解析器是否都为空
-    tw_all_empty = True
-    for r in tw_results:
-        if r.get("status") == "ok" and r.get("ips"):
-            tw_all_empty = False
-            break
-        if r.get("status") not in ("ok", "nxdomain"):
-            tw_all_empty = False
-            break
-    
-    # 分类台湾解析器结果
+    # 分類台灣解析器結果
     tw_classified = []
     reasons = []
-    has_empty_resolution = False
+    has_resolve_failure = False
+    has_pollution = False
     
     for r in tw_results:
         category = classify_tw_result(r, baseline_ips)
@@ -77,29 +72,43 @@ def aggregate_verdict(probe_result: Dict) -> Dict:
             "category": category
         })
         
-        # 收集异常原因
-        if category == "被阻断":
-            reasons.append("污染：被阻断")
-        elif category == "已封锁":
-            reasons.append("污染：已封锁")
-        elif category == "超时":
-            reasons.append("检测失败：超时")
-        elif category == "错误":
-            reasons.append("检测失败：错误")
-        elif category == "空解析":
-            has_empty_resolution = True
+        # 收集原因
+        if category == "已封鎖":
+            reasons.append("污染：已封鎖")
+            has_pollution = True
+        elif category == "解析差異":
+            reasons.append("污染：解析差異")
+            has_pollution = True
+        elif category == "逾時":
+            reasons.append("解析失敗：逾時")
+            has_resolve_failure = True
+        elif category == "解析失敗":
+            reasons.append("解析失敗")
+            has_resolve_failure = True
     
     # 去重
     reasons = list(dict.fromkeys(reasons))
     
-    # 域名级状态判定
-    # 如果基准和台湾都为空，则为"空解析"（正常的一种）
-    if not baseline_ips and tw_all_empty and has_empty_resolution and not reasons:
-        status = "空解析"
-    elif not reasons:
-        status = "正常"
+    # 域名級狀態判定：已污染 / 未污染 / 解析失敗
+    if has_pollution:
+        status = "已污染"
+    elif has_resolve_failure and not any(c["category"] == "正常" for c in tw_classified):
+        # 全部解析器都失敗才算解析失敗
+        status = "解析失敗"
     else:
-        status = "异常"
+        status = "未污染"
+    
+    # 確定 trace_status：追蹤成功 / 追蹤失敗
+    # 若無基準 IP（空解析），追蹤視為成功（無需追蹤）
+    trace_status = None
+    if not baseline_ips:
+        # 空解析，無需追蹤
+        trace_status = "追蹤成功"
+    elif redirect_trace:
+        if redirect_trace.get("success"):
+            trace_status = "追蹤成功"
+        else:
+            trace_status = "追蹤失敗"
     
     return {
         "domain": domain,
@@ -110,5 +119,7 @@ def aggregate_verdict(probe_result: Dict) -> Dict:
             "detail": baseline_results
         },
         "tw": tw_classified,
-        "redirect_trace": redirect_trace
+        "redirect_trace": redirect_trace,
+        "trace_status": trace_status
     }
+

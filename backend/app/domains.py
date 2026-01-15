@@ -1,12 +1,10 @@
 """網域列表讀取與管理"""
 import json
-import re
 from datetime import datetime, timezone, timedelta
 from urllib.parse import urlparse
 from pathlib import Path
 from typing import List, Dict, Optional
 from filelock import FileLock
-from . import config
 
 # 東八區時區
 TZ_UTC8 = timezone(timedelta(hours=8))
@@ -18,6 +16,7 @@ DOMAINS_LOCK = Path(__file__).resolve().parent.parent / "domains.json.lock"
 
 def normalize_domain(raw: str) -> str:
     """規範化網域/URL 輸入，提取純網域名稱"""
+    import re
     s = raw.strip()
     if not s:
         return ""
@@ -35,11 +34,81 @@ def normalize_domain(raw: str) -> str:
     # 轉小寫，去掉尾部點
     s = s.lower().rstrip(".")
     
-    # 簡單校驗
-    if not s or " " in s or len(s) > 253:
+    # 域名格式校驗
+    if not s or len(s) > 253:
         return ""
     
+    # 必須包含至少一個點（排除 localhost 等）
+    if "." not in s:
+        return ""
+    
+    # 只允許合法字符：字母、數字、連字號、點
+    if not re.match(r'^[a-z0-9]([a-z0-9\-\.]*[a-z0-9])?$', s):
+        return ""
+    
+    # 檢查每個標籤（點分隔）
+    labels = s.split(".")
+    for label in labels:
+        # 標籤長度限制
+        if not label or len(label) > 63:
+            return ""
+        # 標籤不能以連字號開頭或結尾
+        if label.startswith("-") or label.endswith("-"):
+            return ""
+        # 標籤不能只包含數字（頂級域名限制）
+        # 注意：這裡不限制中間標籤
+    
     return s
+
+
+def extract_root_domain(domain: str) -> str:
+    """
+    從域名中提取根域名
+    例：www.example.com -> example.com
+    僅處理 www 前綴，其他子域名保持不變
+    """
+    if not domain:
+        return domain
+    parts = domain.lower().split(".")
+    if len(parts) > 2 and parts[0] == "www":
+        return ".".join(parts[1:])
+    return domain
+
+
+def normalize_www_domain(domain: str) -> str:
+    """
+    將 www 子域名收斂到根域名後進行規範化
+    用於自動收錄域名時使用
+    """
+    if not domain:
+        return ""
+    root = extract_root_domain(domain)
+    return normalize_domain(root)
+
+
+def auto_add_domain(domain: str, note: str = "自動收錄") -> bool:
+    """
+    自動收錄域名（用於跳轉追蹤發現的新域名）
+    如果 www 子域名則收斂到根域名
+    返回是否成功新增
+    """
+    normalized = normalize_www_domain(domain)
+    if not normalized:
+        return False
+    
+    data = _read_domains()
+    if normalized in data:
+        return False
+    
+    now = datetime.now(TZ_UTC8).isoformat()
+    data[normalized] = {
+        "reported": False,
+        "polluted": False,
+        "note": note,
+        "created_at": now
+    }
+    _write_domains(data)
+    return True
 
 
 def _read_domains() -> Dict[str, Dict]:
@@ -171,14 +240,83 @@ def toggle_reported(domain: str) -> Optional[bool]:
     return data[domain]["reported"]
 
 
-def update_polluted(domain: str, polluted: bool, last_probe_at: str = None):
-    """更新污染狀態和檢測時間（供探測器調用）"""
+def batch_set_reported(domains: List[str], reported: bool) -> int:
+    """
+    批量設置上報狀態
+    返回實際更新的數量
+    """
     data = _read_domains()
-    if domain in data:
-        data[domain]["polluted"] = polluted
-        if last_probe_at:
-            data[domain]["last_probe_at"] = last_probe_at
+    updated = 0
+    for d in domains:
+        if d in data:
+            data[d]["reported"] = reported
+            updated += 1
+    if updated > 0:
         _write_domains(data)
+    return updated
+
+def update_polluted_and_trace(domain: str, polluted: bool, trace_status: str = None, last_probe_at: str = None):
+    """更新污染狀態、追蹤狀態和檢測時間（供探測器調用）"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        data = _read_domains()
+        if domain in data:
+            data[domain]["polluted"] = polluted
+            if trace_status:
+                data[domain]["trace_status"] = trace_status
+            if last_probe_at:
+                data[domain]["last_probe_at"] = last_probe_at
+            _write_domains(data)
+            logger.debug(f"[domains] 已更新 {domain}: polluted={polluted}, trace_status={trace_status}, 總域名數={len(data)}")
+        else:
+            logger.warning(f"[domains] 域名不存在，無法更新: {domain}")
+    except Exception as e:
+        logger.error(f"[domains] 更新失敗 {domain}: {e}", exc_info=True)
+        raise
+
+
+def batch_update_polluted_and_trace(updates: list):
+    """
+    批量更新多個域名的污染狀態、追蹤狀態和檢測時間
+    
+    Args:
+        updates: [(domain, polluted, trace_status, last_probe_at), ...]
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    if not updates:
+        return
+    
+    try:
+        data = _read_domains()
+        updated_count = 0
+        
+        for domain, polluted, trace_status, last_probe_at in updates:
+            if domain in data:
+                data[domain]["polluted"] = polluted
+                if trace_status:
+                    data[domain]["trace_status"] = trace_status
+                if last_probe_at:
+                    data[domain]["last_probe_at"] = last_probe_at
+                updated_count += 1
+            else:
+                logger.warning(f"[domains] 域名不存在，跳過: {domain}")
+        
+        if updated_count > 0:
+            _write_domains(data)
+            logger.debug(f"[domains] 批量更新完成: {updated_count}/{len(updates)} 條記錄")
+    except Exception as e:
+        logger.error(f"[domains] 批量更新失敗: {e}", exc_info=True)
+        raise
+
+
+# 保留舊函數名以保持兼容性
+def update_polluted(domain: str, polluted: bool, last_probe_at: str = None):
+    """更新污染狀態和檢測時間（供探測器調用）- 已棄用，使用 update_polluted_and_trace"""
+    update_polluted_and_trace(domain, polluted, None, last_probe_at)
 
 
 def import_from_file(filepath: str) -> tuple[int, int]:

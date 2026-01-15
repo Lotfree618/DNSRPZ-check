@@ -1,5 +1,5 @@
 """Pydantic 模型定義"""
-from typing import List, Optional
+from typing import List, Optional, Union
 from pydantic import BaseModel
 
 
@@ -33,15 +33,17 @@ class DomainSummary(BaseModel):
 class RedirectStep(BaseModel):
     """單步跳轉資訊"""
     url: str
-    status: int
+    status: Union[int, str]  # HTTP 狀態碼或 "空解析"
 
 
 class RedirectTrace(BaseModel):
     """跳轉追蹤結果"""
     final_url: Optional[str] = None
     final_domain: Optional[str] = None
+    final_status_code: Optional[int] = None
     chain: List[RedirectStep] = []
     success: bool = False
+    trace_status: Optional[str] = None  # 追蹤成功 | 追蹤異常
     error: Optional[str] = None
 
 
@@ -86,6 +88,7 @@ class DomainInfo(BaseModel):
     note: str
     created_at: str
     last_probe_at: Optional[str] = None
+    trace_status: Optional[str] = None  # 追蹤成功 | 追蹤異常
 
 
 class DomainListResponse(BaseModel):
@@ -132,3 +135,15 @@ class BatchDeleteResponse(BaseModel):
     """批量刪除響應"""
     success: bool
     deleted: int
+
+
+class BatchSetReportedRequest(BaseModel):
+    """批量設置上報狀態請求"""
+    domains: List[str]
+    reported: bool
+
+
+class BatchSetReportedResponse(BaseModel):
+    """批量設置上報狀態響應"""
+    success: bool
+    updated: int
