@@ -77,9 +77,10 @@ def aggregate_verdict(probe_result: Dict) -> Dict:
             reasons.append("污染：已封鎖")
             has_pollution = True
         elif category == "解析差異":
-            reasons.append("污染：解析差異")
-            has_pollution = True
+            # 解析差异不判定为污染，仅记录
+            reasons.append("解析差異")
         elif category == "逾時":
+            # 超时不判定为污染，仅记录为解析失败
             reasons.append("解析失敗：逾時")
             has_resolve_failure = True
         elif category == "解析失敗":
